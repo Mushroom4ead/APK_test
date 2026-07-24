@@ -67,8 +67,11 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
     val history by viewModel.history.collectAsState()
     val server by viewModel.server.collectAsState()
     val customUrl by viewModel.customUrl.collectAsState()
+    val autoMode by viewModel.autoMode.collectAsState()
 
-    val running = state.phase in setOf(TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD)
+    val running = state.phase in setOf(
+        TestPhase.SELECTING, TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD
+    )
 
     Box(
         modifier = Modifier
@@ -84,10 +87,13 @@ fun SpeedTestScreen(viewModel: SpeedTestViewModel) {
             item { Header(state.networkType) }
             item {
                 ServerSelector(
+                    label = if (autoMode) "Авто — ближайший по пингу" else server.name,
                     server = server,
+                    autoMode = autoMode,
                     customUrl = customUrl,
                     enabled = !running,
                     onSelect = viewModel::selectServer,
+                    onSelectAuto = viewModel::selectAuto,
                     onCustomChange = viewModel::setCustomUrl,
                     onApplyCustom = viewModel::applyCustomServer
                 )
@@ -134,10 +140,13 @@ private fun Header(networkType: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServerSelector(
+    label: String,
     server: ServerConfig,
+    autoMode: Boolean,
     customUrl: String,
     enabled: Boolean,
     onSelect: (ServerConfig) -> Unit,
+    onSelectAuto: () -> Unit,
     onCustomChange: (String) -> Unit,
     onApplyCustom: () -> Unit
 ) {
@@ -150,7 +159,7 @@ private fun ServerSelector(
             onExpandedChange = { if (enabled) expanded = !expanded }
         ) {
             OutlinedTextField(
-                value = server.name,
+                value = label,
                 onValueChange = {},
                 readOnly = true,
                 enabled = enabled,
@@ -160,6 +169,10 @@ private fun ServerSelector(
                 modifier = Modifier.fillMaxWidth().menuAnchor()
             )
             ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("Авто — ближайший по пингу") },
+                    onClick = { onSelectAuto(); showCustom = false; expanded = false }
+                )
                 Servers.presets.forEach { s ->
                     DropdownMenuItem(
                         text = { Text(s.name) },
@@ -173,7 +186,7 @@ private fun ServerSelector(
             }
         }
 
-        if (showCustom || server.custom) {
+        if (showCustom || (server.custom && !autoMode)) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -203,6 +216,7 @@ private fun GaugeSection(state: TestState) {
         TestPhase.DOWNLOAD -> Triple(state.liveMbps, AccentDownload, "Загрузка…")
         TestPhase.UPLOAD -> Triple(state.liveMbps, AccentUpload, "Отдача…")
         TestPhase.PING -> Triple(0.0, AccentPing, "Пинг…")
+        TestPhase.SELECTING -> Triple(0.0, AccentPing, "Выбор сервера…")
         TestPhase.DONE -> Triple(state.downloadMbps, AccentDownload, "Готово")
         else -> Triple(0.0, AccentDownload, "")
     }
@@ -281,7 +295,9 @@ private fun MetricCard(label: String, value: String, accent: Color, modifier: Mo
 
 @Composable
 private fun ControlButton(state: TestState, viewModel: SpeedTestViewModel) {
-    val running = state.phase in setOf(TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD)
+    val running = state.phase in setOf(
+        TestPhase.SELECTING, TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD
+    )
     Button(
         onClick = { if (running) viewModel.cancel() else viewModel.start() },
         modifier = Modifier.padding(top = 12.dp).size(width = 200.dp, height = 56.dp),

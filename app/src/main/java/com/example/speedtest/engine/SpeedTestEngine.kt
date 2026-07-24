@@ -72,6 +72,40 @@ class SpeedTestEngine {
         }
     }
 
+    /**
+     * Медианный пинг до сервера (мс). Возвращает Double.MAX_VALUE, если сервер
+     * недоступен. Используется для автовыбора ближайшего сервера.
+     */
+    suspend fun pingServer(server: ServerConfig, count: Int = 4): Double =
+        withContext(Dispatchers.IO) {
+            val samples = ArrayList<Double>()
+            repeat(count) {
+                if (coroutineContext.isActive) {
+                    val t = singlePing(server)
+                    if (t >= 0) samples.add(t)
+                }
+            }
+            if (samples.isEmpty()) Double.MAX_VALUE
+            else {
+                samples.sort()
+                samples[samples.size / 2]
+            }
+        }
+
+    /** Выбирает сервер с наименьшим пингом из списка. */
+    suspend fun pickFastest(servers: List<ServerConfig>): Pair<ServerConfig, Double> {
+        var best = servers.first()
+        var bestPing = Double.MAX_VALUE
+        for (s in servers) {
+            val p = pingServer(s, 3)
+            if (p < bestPing) {
+                bestPing = p
+                best = s
+            }
+        }
+        return best to bestPing
+    }
+
     // ---- URL helpers -----------------------------------------------------
 
     private fun downloadUrl(server: ServerConfig): String = when (server.protocol) {

@@ -35,15 +35,26 @@ class SpeedTestViewModel(app: Application) : AndroidViewModel(app) {
     private val _customUrl = MutableStateFlow("")
     val customUrl: StateFlow<String> = _customUrl.asStateFlow()
 
+    // Режим автовыбора ближайшего сервера по пингу
+    private val _autoMode = MutableStateFlow(false)
+    val autoMode: StateFlow<Boolean> = _autoMode.asStateFlow()
+
     private var job: Job? = null
 
     val isRunning: Boolean
         get() = _state.value.phase in setOf(
-            TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD
+            TestPhase.SELECTING, TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD
         )
 
     fun selectServer(server: ServerConfig) {
-        if (!isRunning) _server.value = server
+        if (!isRunning) {
+            _autoMode.value = false
+            _server.value = server
+        }
+    }
+
+    fun selectAuto() {
+        if (!isRunning) _autoMode.value = true
     }
 
     fun setCustomUrl(url: String) {
@@ -61,13 +72,21 @@ class SpeedTestViewModel(app: Application) : AndroidViewModel(app) {
     fun start() {
         if (isRunning) return
         val netType = NetworkUtil.currentType(getApplication())
-        val srv = _server.value
+        val auto = _autoMode.value
         _state.value = TestState(
-            phase = TestPhase.PING,
+            phase = if (auto) TestPhase.SELECTING else TestPhase.PING,
             networkType = netType,
-            serverName = srv.name
+            serverName = if (auto) "Определяю ближайший…" else _server.value.name
         )
         job = viewModelScope.launch {
+            val srv = if (auto) {
+                val (best, _) = engine.pickFastest(Servers.presets)
+                _server.value = best
+                _state.value = _state.value.copy(serverName = "Авто → ${best.name}")
+                best
+            } else {
+                _server.value
+            }
             engine.run(_state, netType, srv)
             if (_state.value.phase == TestPhase.DONE) {
                 val s = _state.value

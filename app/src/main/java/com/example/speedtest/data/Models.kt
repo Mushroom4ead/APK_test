@@ -3,6 +3,7 @@ package com.example.speedtest.data
 /** Фаза замера — для отображения в UI. */
 enum class TestPhase {
     IDLE,       // ожидание
+    SELECTING,  // автовыбор ближайшего сервера
     PING,       // измеряем задержку
     DOWNLOAD,   // измеряем загрузку
     UPLOAD,     // измеряем отдачу
