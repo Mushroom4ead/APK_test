@@ -19,8 +19,11 @@ data class TestState(
     val uploadMbps: Double = 0.0,
     // Мгновенная скорость текущей фазы (для стрелки спидометра), Мбит/с
     val liveMbps: Double = 0.0,
+    // Сэмплы мгновенной скорости текущей фазы — для графика в реальном времени (Мбит/с)
+    val liveSamples: List<Float> = emptyList(),
     val progress: Float = 0f,          // 0..1 внутри текущей фазы
     val networkType: String = "—",
+    val serverName: String = "",
     val errorMessage: String? = null
 )
 

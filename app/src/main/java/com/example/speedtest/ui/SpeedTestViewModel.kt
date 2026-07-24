@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.speedtest.data.HistoryStore
 import com.example.speedtest.data.NetworkUtil
+import com.example.speedtest.data.ServerConfig
+import com.example.speedtest.data.Servers
 import com.example.speedtest.data.TestPhase
 import com.example.speedtest.data.TestResult
 import com.example.speedtest.data.TestState
@@ -26,6 +28,13 @@ class SpeedTestViewModel(app: Application) : AndroidViewModel(app) {
     private val _history = MutableStateFlow(historyStore.load())
     val history: StateFlow<List<TestResult>> = _history.asStateFlow()
 
+    // Выбранный сервер и введённый пользователем адрес «своего сервера»
+    private val _server = MutableStateFlow(Servers.CLOUDFLARE)
+    val server: StateFlow<ServerConfig> = _server.asStateFlow()
+
+    private val _customUrl = MutableStateFlow("")
+    val customUrl: StateFlow<String> = _customUrl.asStateFlow()
+
     private var job: Job? = null
 
     val isRunning: Boolean
@@ -33,12 +42,33 @@ class SpeedTestViewModel(app: Application) : AndroidViewModel(app) {
             TestPhase.PING, TestPhase.DOWNLOAD, TestPhase.UPLOAD
         )
 
+    fun selectServer(server: ServerConfig) {
+        if (!isRunning) _server.value = server
+    }
+
+    fun setCustomUrl(url: String) {
+        _customUrl.value = url
+    }
+
+    /** Применить введённый адрес как «свой сервер». */
+    fun applyCustomServer() {
+        val url = _customUrl.value.trim()
+        if (url.isNotEmpty() && !isRunning) {
+            _server.value = Servers.custom(url)
+        }
+    }
+
     fun start() {
         if (isRunning) return
         val netType = NetworkUtil.currentType(getApplication())
-        _state.value = TestState(phase = TestPhase.PING, networkType = netType)
+        val srv = _server.value
+        _state.value = TestState(
+            phase = TestPhase.PING,
+            networkType = netType,
+            serverName = srv.name
+        )
         job = viewModelScope.launch {
-            engine.run(_state, netType)
+            engine.run(_state, netType, srv)
             if (_state.value.phase == TestPhase.DONE) {
                 val s = _state.value
                 val result = TestResult(
@@ -56,23 +86,14 @@ class SpeedTestViewModel(app: Application) : AndroidViewModel(app) {
 
     fun cancel() {
         job?.cancel()
-        _state.value = TestState(networkType = NetworkUtil.currentType(getApplication()))
-    }
-
-    fun reset() {
-        _state.value = TestState(networkType = NetworkUtil.currentType(getApplication()))
+        _state.value = TestState(
+            networkType = NetworkUtil.currentType(getApplication()),
+            serverName = _server.value.name
+        )
     }
 
     fun clearHistory() {
         historyStore.clear()
         _history.value = emptyList()
-    }
-
-    fun refreshNetworkType() {
-        if (!isRunning) {
-            _state.value = _state.value.copy(
-                networkType = NetworkUtil.currentType(getApplication())
-            )
-        }
     }
 }
